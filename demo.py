@@ -43,15 +43,30 @@ class Crypto:
         return hmac.compare_digest(actual, expected_mac)
 
 class Message:
-    def __init__(self, message: str):
+    def __init__(self):
         self.crypto = Crypto()
+
+    def set_sender_name(self, name: str):
+        self.name = name
+
+    def set_sender_private_key(self, private_key: bytes):
+        self.sender_private_key = private_key
+
+    def set_message(self, message: str):
         self.message = message.encode()
 
-    def build_envelope(
-        self,
-        receiver_public_key,
-        sender_name: str = "anonymous",
-    ) -> dict:
+    def send_message(self, recipient_public_key: bytes):
+        message_envelope = self.build_envelope(recipient_public_key)
+        print(f"\n{self.name}'s Message Envelope: {json.dumps(message_envelope, indent=2)}")
+
+        # Save the message envelope to a file
+        os.makedirs("shared", exist_ok=True)
+        message_file = f"shared/{self.name}_message.txt"
+        print(f"Writing {self.name}'s Message to {message_file}")
+        self.save_envelope(message_envelope, message_file)
+        return message_file
+
+    def build_envelope(self, recipient_public_key: bytes) -> dict:
         # 1. Fresh AES-256 key
         aes_key = os.urandom(32)
 
@@ -59,7 +74,7 @@ class Message:
         iv, ciphertext, gcm_tag = self.crypto.aes_encrypt(aes_key, self.message)
 
         # 3. Encrypt AES key
-        enc_aes_key = self.crypto.rsa_encrypt(receiver_public_key, aes_key)
+        enc_aes_key = self.crypto.rsa_encrypt(recipient_public_key, aes_key)
 
         # 4. MAC over (enc_aes_key ‖ iv ‖ ciphertext ‖ gcm_tag)
         mac = self.crypto.compute_mac(aes_key, enc_aes_key, iv, ciphertext, gcm_tag)
@@ -68,15 +83,16 @@ class Message:
             return base64.b64encode(b).decode()
 
         return {
-            "sender": sender_name,
-            "enc_aes_key": b64(enc_aes_key),
-            "iv":          b64(iv),
-            "ciphertext":  b64(ciphertext),
-            "gcm_tag":     b64(gcm_tag),
-            "mac":         b64(mac),
+            "sender":       self.name,
+            "enc_aes_key":  b64(enc_aes_key),
+            "iv":           b64(iv),
+            "ciphertext":   b64(ciphertext),
+            "gcm_tag":      b64(gcm_tag),
+            "mac":          b64(mac),
         }
 
-    def open_envelope(self, envelope: dict, receiver_private_key) -> bytes:
+    def read_message(self, message_envelop_location: str, receiver_private_key) -> bytes:
+        envelope = self.load_message_envelope(message_envelop_location)
         def d64(s: str) -> bytes:
             return base64.b64decode(s)
 
@@ -94,83 +110,65 @@ class Message:
             raise ValueError("MAC verification FAILED — message has been tampered with or is corrupt.")
 
         # 4. Decrypt message (GCM tag verified inside aes_decrypt)
-        return self.crypto.aes_decrypt(aes_key, iv, ciphertext, gcm_tag)
+        decrypted_message = self.crypto.aes_decrypt(aes_key, iv, ciphertext, gcm_tag)
+        return decrypted_message.decode()
 
     def save_envelope(self, envelope: dict, path: str):
         with open(path, "w") as f:
             json.dump(envelope, f, indent=2)
 
 
-    def load_envelope(self, path: str) -> dict:
+    def load_message_envelope(self, path: str) -> dict:
         with open(path) as f:
             return json.load(f)
 
 def main():
-    # Generate keys for Alice and Bob
+    # **************** Generate keys for Alice and Bob ****************
     alice_private_key, alice_public_key = Crypto.generate_rsa_keypair()
     bob_private_key, bob_public_key = Crypto.generate_rsa_keypair()
 
+    # **************** Setup message objects for Alice and Bob ****************
+    AlicesMessage = Message()
+    BobsMessage = Message()
+
+    # **************** Setup message object for Alice to use to send messages ****************
+    AlicesMessage.set_sender_name("Alice")
+    AlicesMessage.set_sender_private_key(alice_private_key)
+
+    # **************** Setup message object for Bob to use to send messages ****************
+    BobsMessage.set_sender_name("Bob")
+    BobsMessage.set_sender_private_key(bob_private_key)
+
     # ************************* Alice sends Bob a Message *************************
     print("****** Alice Sends Bob a Message ******")
-    # Set the Message
+    # Set Alice's the Message
     alices_original_message = "This is a secret message"
-    AlicesMessage = Message(alices_original_message)
     print(f"Alice's Original Message: {alices_original_message}")
+    AlicesMessage.set_message(alices_original_message)
 
-    # Alice builds the message with Bob's Public Key
-    alices_message = AlicesMessage.build_envelope(bob_public_key, sender_name="Alice")
-    print(f"\nAlice's Message Envelope: {json.dumps(alices_message, indent=2)}")
-
-    # Save the message envelope to a file
-    os.makedirs("shared", exist_ok=True)
-    alices_message_file = "shared/alice_message.txt"
-    print(f"Writing Alice's Message to {alices_message_file}")
-    AlicesMessage.save_envelope(alices_message, alices_message_file)
+    # We send the message with Bob's public key since he is the recipient
+    # this file can now be sent to Bob.
+    alice_to_bob_message_file = AlicesMessage.send_message(bob_public_key)
 
     # Bob retrieves the message envelope from the file and begins recovery with his private key
-    loaded = AlicesMessage.load_envelope("shared/alice_message.txt")
-    decrypted = AlicesMessage.open_envelope(loaded, bob_private_key)
-    print("\nDecrypted Message:  " + "\n  ".join(decrypted.decode().splitlines()))
+    print(f"\nBob recieves Alice's file ({alice_to_bob_message_file}) and decrypts and reads Alice's message")
+    alices_decrypted_message = BobsMessage.read_message(alice_to_bob_message_file, bob_private_key)
+    print("Alice's Decrypted Message:  " + f"\n {alices_decrypted_message}")
+
 
     # ************************* Bob sends Alice a Message *************************
     print("\n\n****** Bob Sends Alice a Message ******")
     # Set Bob's Message
     bobs_original_message = "This is ANOTHER secret message"
-    BobsMessage = Message(bobs_original_message)
     print(f"Bob's Original Message: {bobs_original_message}")
+    BobsMessage.set_message(bobs_original_message)
 
     # Bob sends Alice a message with Alice's Public Key
-    bobs_message = BobsMessage.build_envelope(alice_public_key, sender_name="Bob")
-    print(f"\nBob's Message Envelope: {json.dumps(bobs_message, indent=2)}")
+    bob_to_alice_message_file = BobsMessage.send_message(alice_public_key)
 
-    # Save the message envelope to a file
-    os.makedirs("shared", exist_ok=True)
-    bobs_message_file = "shared/bob_message.txt"
-    print(f"Writing Bob's Message to {bobs_message_file}")
-    BobsMessage.save_envelope(bobs_message, bobs_message_file)
-
-    # Bob retrieves the message envelope from the file and begins recovery with his private key
-    loaded = BobsMessage.load_envelope("shared/alice_message.txt")
-    decrypted = BobsMessage.open_envelope(loaded, bob_private_key)
-    print("\nDecrypted Message:  " + "\n  ".join(decrypted.decode().splitlines()))
-
-    # ************************* Show tampering *************************
-    print("\n\nLet's Tamper With Alice's Message....")
-    tampered = json.loads(json.dumps(loaded))          # deep copy
-    ct = bytearray(base64.b64decode(tampered["ciphertext"]))
-    ct[0] ^= 0xFF                                       # flip byte
-    tampered["ciphertext"] = base64.b64encode(bytes(ct)).decode()
-    print(f"Tampered Ciphertext: {tampered["ciphertext"]}")
-    try:
-        AlicesMessage.open_envelope(tampered, bob_private_key)
-        print("ERROR: tampered envelope was accepted!")
-    except ValueError as e:
-        print(f"Tampered envelope correctly REJECTED: {e}")
-
-    try:
-        AlicesMessage.open_envelope(loaded, alice_private_key)
-        print("ERROR: wrong private key was accepted!")
-    except Exception as e:
-        print(f"Wrong private key correctly REJECTED")
+    # Alice retrieves Bob's message and decrypts with her private key
+    print(f"\nAlice recieves Bob's file ({bob_to_alice_message_file}) and decrypts and reads Bob's message")
+    bobs_decrypted_message = AlicesMessage.read_message(bob_to_alice_message_file, alice_private_key)
+    print("Bob's Decrypted Message:  " + f"\n  {bobs_decrypted_message}")
 
 main()
