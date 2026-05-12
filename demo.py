@@ -305,6 +305,35 @@ def main():
     bobs_decrypted_message = AlicesMessage.read_message(bob_to_alice_message_file, alice_private_key)
     print("Bob's Decrypted Message:  " + f"\n  {bobs_decrypted_message}")
 
+    # ************************* Tamper Test *************************
+    print("\n\n****** Tamper Test, Alice's message gets tampered with ******")
+    # We load the file to tamper with
+    message_to_tamper = BobsMessage.load_message_envelope(alice_to_bob_message_file)
+    tampered = json.loads(json.dumps(message_to_tamper))
+    # Start tampering with flipping a byte
+    print(f"Original Ciphertext: {tampered['ciphertext']}")
+    ct = bytearray(base64.b64decode(tampered["ciphertext"]))
+    # flip byte
+    ct[0] ^= 0xFF
+    tampered["ciphertext"] = base64.b64encode(bytes(ct)).decode()
+    print(f"Tampered Ciphertext: {tampered['ciphertext']}")
+    # Save the tampered file
+    AlicesMessage.save_envelope(tampered, alice_to_bob_message_file)
+
+    print("\n\nTest with ciphertext tampering")
+    try:
+        BobsMessage.read_message(alice_to_bob_message_file, bob_private_key)
+        print("ERROR: tampered envelope was accepted!")
+    except ValueError as e:
+        print(f"Tampered envelope - REJECTED: {e}")
+
+    print("\n\nTest with wrong key")
+    try:
+        BobsMessage.read_message(alices_decrypted_message, alice_private_key)
+        print("ERROR: wrong private key was accepted!")
+    except Exception as e:
+        print("Wrong private key - REJECTED")
+
 
 if __name__ == "__main__":
     main()
