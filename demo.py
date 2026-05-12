@@ -327,7 +327,23 @@ def main():
     except ValueError as e:
         print(f"Tampered envelope - REJECTED: {e}")
 
-    print("\n\nTest with wrong key")
+    print(f"Original MAC: {tampered['mac']}")
+    ct = bytearray(base64.b64decode(tampered["mac"]))
+    # flip byte
+    ct[0] ^= 0xFF
+    tampered["mac"] = base64.b64encode(bytes(ct)).decode()
+    print(f"Tampered MAC: {tampered['mac']}")
+    # Save the tampered file
+    AlicesMessage.save_envelope(tampered, alice_to_bob_message_file)
+
+    print("\n\nTest with MAC tampering")
+    try:
+        BobsMessage.read_message(alice_to_bob_message_file, bob_private_key)
+        print("ERROR: tampered envelope was accepted!")
+    except ValueError as e:
+        print(f"Tampered envelope - REJECTED: {e}")
+
+    print("\n\nTest with wrong private key")
     try:
         BobsMessage.read_message(alices_decrypted_message, alice_private_key)
         print("ERROR: wrong private key was accepted!")
