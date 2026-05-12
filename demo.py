@@ -3,7 +3,6 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import rsa, padding as asym_padding
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
-
 class Crypto:
     """
     Class to do all things related to cryptography.
@@ -291,7 +290,6 @@ def main():
     alices_decrypted_message = BobsMessage.read_message(alice_to_bob_message_file, bob_private_key)
     print("Alice's Decrypted Message:  " + f"\n {alices_decrypted_message}")
 
-
     # ************************* Bob sends Alice a Message *************************
     print("\n\n****** Bob Sends Alice a Message ******")
     # Set Bob's Message
@@ -306,6 +304,7 @@ def main():
     print(f"\nAlice recieves Bob's file ({bob_to_alice_message_file}) and decrypts and reads Bob's message")
     bobs_decrypted_message = AlicesMessage.read_message(bob_to_alice_message_file, alice_private_key)
     print("Bob's Decrypted Message:  " + f"\n  {bobs_decrypted_message}")
+
 
 if __name__ == "__main__":
     main()
