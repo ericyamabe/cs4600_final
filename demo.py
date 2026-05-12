@@ -3,7 +3,13 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import rsa, padding as asym_padding
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
+
 class Crypto:
+    """
+    Class to do all things related to cryptography.
+    """
+
+    # OAEP Padding configuration to use SHA 256
     _OAEP = asym_padding.OAEP(
         mgf=asym_padding.MGF1(algorithm=hashes.SHA256()),
         algorithm=hashes.SHA256(),
@@ -12,61 +18,154 @@ class Crypto:
 
     @staticmethod
     def generate_rsa_keypair(key_size: int = 2048):
+        """
+        Generate private/public key pair
+        :param key_size: Default 2048
+        :return: private/public key
+        """
         private_key = rsa.generate_private_key(public_exponent=65537, key_size=key_size)
         return private_key, private_key.public_key()
 
     def aes_encrypt(self, key: bytes, plaintext: bytes) -> tuple[bytes, bytes, bytes]:
+        """
+        Encrypt using AES
+        :param key:
+        :param plaintext:
+        :return: iv, ciphertext, tag
+        """
+        # Set the IV
         iv = os.urandom(12)
+        # Use AES GCM
         aesgcm = AESGCM(key)
+        # Encrypt plaintext using IV
         ct = aesgcm.encrypt(iv, plaintext, None)
+        # Sets the ciphertext using everything except the last 16 bytes, then sets the tag using the last 16 bytes.
         ciphertext, tag = ct[:-16], ct[-16:]
         return iv, ciphertext, tag
 
     def aes_decrypt(self, key: bytes, iv: bytes, ciphertext: bytes, tag: bytes) -> bytes:
+        """
+        Decrypts AES encrypted ciphertext
+        :param key:
+        :param iv:
+        :param ciphertext:
+        :param tag:
+        :return: decrypted data
+        """
+        # Use AES GCM
         aesgcm = AESGCM(key)
+        # Decrypt using the passed IV and ciphertext + tag combination
         return aesgcm.decrypt(iv, ciphertext + tag, None)
 
     def rsa_encrypt(self, public_key, data: bytes) -> bytes:
+        """
+        Encrypts with FSA
+        :param public_key:
+        :param data:
+        :return: RSA encrypted ciphertext
+        """
         return public_key.encrypt(data, self._OAEP)
 
     def rsa_decrypt(self, private_key, data: bytes) -> bytes:
+        """
+        Decrypts RSA ciphertext
+        :param private_key:
+        :param data:
+        :return: plaintext
+        """
         return private_key.decrypt(data, self._OAEP)
 
     def compute_mac(self, mac_key: bytes, *parts: bytes) -> bytes:
+        """
+        Generates a Keyed-Hashing for Message Authentication (HMAC) using the SHA-256 algorithm
+        :param mac_key:
+        :param parts:
+        :return:
+        """
+        # This initializes a new HMAC object.
         h = hmac.new(mac_key, digestmod=hashlib.sha256)
+        # loops through data parts and feeds them into the hasher one by one.
         for p in parts:
             h.update(p)
+        #calculates the final HMAC and returns it as a binary byte string.
         return h.digest()
 
     def verify_mac(self, mac_key: bytes, expected_mac: bytes, *parts: bytes) -> bool:
+        """
+        Verifies MAC's authenticity
+        :param mac_key:
+        :param expected_mac:
+        :param parts:
+        :return:
+        """
+        # re-calculates the HMAC using the secret key and the data chunks
         actual = self.compute_mac(mac_key, *parts)
+        # returns boolean value if recalculated has matches what was passed.
         return hmac.compare_digest(actual, expected_mac)
 
 class Message:
+    """
+    Class to do all things related to messages
+    """
+
     def __init__(self):
+        """
+        Constructor - Initiates the crypto class and saves as a class variable
+        """
         self.crypto = Crypto()
 
     def set_sender_name(self, name: str):
+        """
+        Sets the sender name for the object
+        :param name:
+        :return: void
+        """
         self.name = name
 
     def set_sender_private_key(self, private_key: bytes):
+        """
+        Sets the sender private key to be used
+        :param private_key:
+        :return: void
+        """
         self.sender_private_key = private_key
 
     def set_message(self, message: str):
+        """
+        Sets the message to be semt
+        :param message:
+        :return: void
+        """
         self.message = message.encode()
 
     def send_message(self, recipient_public_key: bytes):
+        """
+        Sends the message
+        :param recipient_public_key:
+        :return: message file the envelope has been saved to
+        """
+        # builds the message envelope
         message_envelope = self.build_envelope(recipient_public_key)
+        # output for demo showing the message envelops content
         print(f"\n{self.name}'s Message Envelope: {json.dumps(message_envelope, indent=2)}")
 
         # Save the message envelope to a file
         os.makedirs("shared", exist_ok=True)
+        # Set the file name/location
         message_file = f"shared/{self.name}_message.txt"
+        # output for demo showing the message file
         print(f"Writing {self.name}'s Message to {message_file}")
+        # save the message envelope
         self.save_envelope(message_envelope, message_file)
+        # return the message text file/location
         return message_file
 
     def build_envelope(self, recipient_public_key: bytes) -> dict:
+        """
+        Builds the envelope of the message
+        :param recipient_public_key:
+        :return: Envelope data as a dictionary
+        """
         # 1. Fresh AES-256 key
         aes_key = os.urandom(32)
 
@@ -80,6 +179,11 @@ class Message:
         mac = self.crypto.compute_mac(aes_key, enc_aes_key, iv, ciphertext, gcm_tag)
 
         def b64(b: bytes) -> str:
+            """
+            Converts a bytes into a base64 encoded string
+            :param b:
+            :return: Base 64 encoded string
+            """
             return base64.b64encode(b).decode()
 
         return {
@@ -92,14 +196,32 @@ class Message:
         }
 
     def read_message(self, message_envelop_location: str, receiver_private_key) -> bytes:
+        """
+        Reads the message from a file
+        :param message_envelop_location:
+        :param receiver_private_key:
+        :return: Decrypted message
+        """
+        # Loads the message envelope from the file location
         envelope = self.load_message_envelope(message_envelop_location)
+
         def d64(s: str) -> bytes:
+            """
+            Decodes a base64 encoded string to a byte array
+            :param s:
+            :return:
+            """
             return base64.b64decode(s)
 
+        # sets AES Key
         enc_aes_key = d64(envelope["enc_aes_key"])
+        # sets IV
         iv          = d64(envelope["iv"])
+        # sets ciphertext
         ciphertext  = d64(envelope["ciphertext"])
+        # sets tag
         gcm_tag     = d64(envelope["gcm_tag"])
+        # sets mac
         mac         = d64(envelope["mac"])
 
         # 3. Decrypt AES key first (needed for MAC verification)
@@ -114,11 +236,21 @@ class Message:
         return decrypted_message.decode()
 
     def save_envelope(self, envelope: dict, path: str):
+        """
+        Saves the envelope to a file
+        :param envelope:
+        :param path:
+        :return:
+        """
         with open(path, "w") as f:
             json.dump(envelope, f, indent=2)
 
-
     def load_message_envelope(self, path: str) -> dict:
+        """
+        Loads the envelope from a file
+        :param path:
+        :return: JSON from a file
+        """
         with open(path) as f:
             return json.load(f)
 
