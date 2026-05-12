@@ -311,6 +311,7 @@ def main():
     message_to_tamper = BobsMessage.load_message_envelope(alice_to_bob_message_file)
     tampered = json.loads(json.dumps(message_to_tamper))
     # Start tampering with flipping a byte
+    print("\n\nTest with ciphertext tampering")
     print(f"Original Ciphertext: {tampered['ciphertext']}")
     ct = bytearray(base64.b64decode(tampered["ciphertext"]))
     # flip byte
@@ -320,13 +321,13 @@ def main():
     # Save the tampered file
     AlicesMessage.save_envelope(tampered, alice_to_bob_message_file)
 
-    print("\n\nTest with ciphertext tampering")
     try:
         BobsMessage.read_message(alice_to_bob_message_file, bob_private_key)
         print("ERROR: tampered envelope was accepted!")
     except ValueError as e:
         print(f"Tampered envelope - REJECTED: {e}")
 
+    print("\n\nTest with MAC tampering")
     print(f"Original MAC: {tampered['mac']}")
     ct = bytearray(base64.b64decode(tampered["mac"]))
     # flip byte
@@ -336,7 +337,6 @@ def main():
     # Save the tampered file
     AlicesMessage.save_envelope(tampered, alice_to_bob_message_file)
 
-    print("\n\nTest with MAC tampering")
     try:
         BobsMessage.read_message(alice_to_bob_message_file, bob_private_key)
         print("ERROR: tampered envelope was accepted!")
