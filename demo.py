@@ -18,7 +18,7 @@ class Crypto:
     @staticmethod
     def generate_rsa_keypair(key_size: int = 2048):
         """
-        Generate private/public key pair.  Satisfies Requirment 1 of Final
+        Generate private/public key pair.  Satisfies Requirement 1 of Final
         :param key_size: Default 2048
         :return: private/public key
         """
