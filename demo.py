@@ -19,7 +19,7 @@ class Crypto:
     @staticmethod
     def generate_rsa_keypair(key_size: int = 2048):
         """
-        Generate private/public key pair
+        Generate private/public key pair.  Satisfies Requirment 1 of Final
         :param key_size: Default 2048
         :return: private/public key
         """
@@ -162,7 +162,7 @@ class Message:
 
     def build_envelope(self, recipient_public_key: bytes) -> dict:
         """
-        Builds the envelope of the message
+        Builds the envelope of the message.  Satisfies Requirement 3 and 4 of Final
         :param recipient_public_key:
         :return: Envelope data as a dictionary
         """
@@ -172,7 +172,7 @@ class Message:
         # 2. Encrypt message
         iv, ciphertext, gcm_tag = self.crypto.aes_encrypt(aes_key, self.message)
 
-        # 3. Encrypt AES key
+        # 3. Encrypt AES key - Satisfies Requirement 3 of Final
         enc_aes_key = self.crypto.rsa_encrypt(recipient_public_key, aes_key)
 
         # 4. MAC over (enc_aes_key ‖ iv ‖ ciphertext ‖ gcm_tag)
@@ -186,6 +186,7 @@ class Message:
             """
             return base64.b64encode(b).decode()
 
+        # Satisfies Requirement 4 of Final by appending MAC to data
         return {
             "sender":       self.name,
             "enc_aes_key":  b64(enc_aes_key),
@@ -197,7 +198,7 @@ class Message:
 
     def read_message(self, message_envelop_location: str, receiver_private_key) -> bytes:
         """
-        Reads the message from a file
+        Reads the message from a file.  Satisfies Requirement 5 of Final
         :param message_envelop_location:
         :param receiver_private_key:
         :return: Decrypted message
@@ -237,7 +238,7 @@ class Message:
 
     def save_envelope(self, envelope: dict, path: str):
         """
-        Saves the envelope to a file
+        Saves the envelope to a file. Satisfies Requirement 2 of Final
         :param envelope:
         :param path:
         :return:
@@ -256,6 +257,7 @@ class Message:
 
 def main():
     # **************** Generate keys for Alice and Bob ****************
+    # Satisfies Requirement 1 of Final
     alice_private_key, alice_public_key = Crypto.generate_rsa_keypair()
     bob_private_key, bob_public_key = Crypto.generate_rsa_keypair()
 
@@ -279,10 +281,12 @@ def main():
     AlicesMessage.set_message(alices_original_message)
 
     # We send the message with Bob's public key since he is the recipient
-    # this file can now be sent to Bob.
+    # this file can now be sent to Bob. Satisfies Requirement 2, 3, and 4 of Final
+    # The file returned is proof of requirement 2.
     alice_to_bob_message_file = AlicesMessage.send_message(bob_public_key)
 
-    # Bob retrieves the message envelope from the file and begins recovery with his private key
+    # Bob retrieves the message envelope from the file and begins recovery with his private key. Satisfies requirement 5
+    # of the Finals
     print(f"\nBob recieves Alice's file ({alice_to_bob_message_file}) and decrypts and reads Alice's message")
     alices_decrypted_message = BobsMessage.read_message(alice_to_bob_message_file, bob_private_key)
     print("Alice's Decrypted Message:  " + f"\n {alices_decrypted_message}")
