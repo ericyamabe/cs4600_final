@@ -307,4 +307,5 @@ def main():
     bobs_decrypted_message = AlicesMessage.read_message(bob_to_alice_message_file, alice_private_key)
     print("Bob's Decrypted Message:  " + f"\n  {bobs_decrypted_message}")
 
-main()
+if __name__ == "__main__":
+    main()
